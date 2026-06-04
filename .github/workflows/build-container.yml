@@ -1,0 +1,78 @@
+name: Scheduled Multi-Branch Build with Cache
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  check-and-build:
+      runs-on: ubuntu-latest
+      strategy:
+        fail-fast: false
+        matrix:
+          include:
+            - ros_distro: foxy
+              upstream_branch: foxy
+            - ros_distro: humble
+              upstream_branch: humble
+  steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get upstream hash
+        id: upstream
+        run: |
+          # Check the latest commit hash from the upstream repository
+          UPSTREAM_URL="https://github.com/TechmanRobotInc/tmr_ros2.git"
+          HASH=$(git ls-remote $UPSTREAM_URL refs/heads/${{ matrix.upstream_branch }} | awk '{print $1}')
+          echo "latest_hash=$HASH" >> $GITHUB_OUTPU
+
+      - name: Restore previous hash from cache
+        id: cache-hash
+        uses: actions/cache@v4
+        with:
+          path: prev_hash_${{ matrix.ros_distro }}.txt
+          # restore-keys can be used to restore the previous hash if the current one is not found
+          key: hash-${{ matrix.ros_distro }}-${{ steps.upstream.outputs.hash }}
+
+      - name: Check if build is needed
+        id: check
+        run: |
+          if [ "${{ steps.cache-hash.outputs.cache-hit }}" == "true" ]; then
+            echo "No updates found for ${{ matrix.ros_distro }}. Skipping build."
+            echo "should_build=false" >> $GITHUB_OUTPUT
+          else
+            echo "New updates or no cache found. Starting build..."
+            echo "should_build=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set up Docker Buildx
+        if: steps.check.outputs.should_build == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        if: steps.check.outputs.should_build == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and Push
+        if: steps.check.outputs.should_build == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          build-args: |
+            ROS_DISTRO=${{ matrix.ros_distro }}
+            BRANCH=${{ matrix.upstream_branch }}
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ matrix.ros_distro }}-latest
+            ghcr.io/${{ github.repository }}:${{ matrix.ros_distro }}-${{ steps.upstream.outputs.hash }}
+
+      # Save the current hash to cache for future comparisons
+      - name: Save new hash to cache
+        if: steps.check.outputs.should_build == 'true'
+        run: cp current_hash_${{ matrix.ros_distro }}.txt prev_hash_${{ matrix.ros_distro }}.txt

@@ -2,21 +2,21 @@ name: Scheduled Multi-Branch Build with Cache
 
 on:
   schedule:
-    - cron: '0 0 * * *'
+    - cron: "0 0 * * *"
   workflow_dispatch:
 
 jobs:
   check-and-build:
-      runs-on: ubuntu-latest
-      strategy:
-        fail-fast: false
-        matrix:
-          include:
-            - ros_distro: foxy
-              upstream_branch: foxy
-            - ros_distro: humble
-              upstream_branch: humble
-  steps:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - ros_distro: foxy
+            upstream_branch: foxy
+          - ros_distro: humble
+            upstream_branch: humble
+    steps:
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -26,7 +26,8 @@ jobs:
           # Check the latest commit hash from the upstream repository
           UPSTREAM_URL="https://github.com/TechmanRobotInc/tmr_ros2.git"
           HASH=$(git ls-remote $UPSTREAM_URL refs/heads/${{ matrix.upstream_branch }} | awk '{print $1}')
-          echo "latest_hash=$HASH" >> $GITHUB_OUTPU
+          echo "hash=$HASH" >> $GITHUB_OUTPUT
+          echo "$HASH" > current_hash_${{ matrix.ros_distro }}.txt
 
       - name: Restore previous hash from cache
         id: cache-hash

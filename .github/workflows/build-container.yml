@@ -70,8 +70,8 @@ jobs:
             ROS_DISTRO=${{ matrix.ros_distro }}
             BRANCH=${{ matrix.upstream_branch }}
           tags: |
-            ghcr.io/${{ github.repository }}:${{ matrix.ros_distro }}-latest
-            ghcr.io/${{ github.repository }}:${{ matrix.ros_distro }}-${{ steps.upstream.outputs.hash }}
+            ghcr.io/${{ steps.repo_name.outputs.lowercase }}:${{ matrix.ros_distro }}-latest
+            ghcr.io/${{ steps.repo_name.outputs.lowercase }}:${{ matrix.ros_distro }}-${{ steps.upstream.outputs.hash }}
 
       # Save the current hash to cache for future comparisons
       - name: Save new hash to cache

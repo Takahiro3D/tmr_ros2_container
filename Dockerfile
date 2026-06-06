@@ -50,4 +50,6 @@ RUN apt-get update && apt-get install -y \
     apt-get purge -y python3-rosdep && \
     rm -rf /var/lib/apt/lists/*
 
-ENTRYPOINT ["/ros2_ws/install/setup.sh"]
+ENTRYPOINT ["/bin/bash", "-c", "source /ros2_ws/install/setup.bash && exec \"$@\"", "--"]
+
+CMD ["bash"]

@@ -14,6 +14,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        ros_distro: [foxy, humble]
+        target: [driver, driver-moveit]
         include:
           - ros_distro: foxy
             upstream_branch: foxy
@@ -35,21 +37,21 @@ jobs:
           UPSTREAM_URL="https://github.com/TechmanRobotInc/tmr_ros2.git"
           HASH=$(git ls-remote $UPSTREAM_URL refs/heads/${{ matrix.upstream_branch }} | awk '{print $1}')
           echo "hash=$HASH" >> $GITHUB_OUTPUT
-          echo "$HASH" > current_hash_${{ matrix.ros_distro }}.txt
+          echo "$HASH" > current_hash_${{ matrix.ros_distro }}-${{ matrix.target }}.txt
 
       - name: Restore previous hash from cache
         id: cache-hash
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
-          path: prev_hash_${{ matrix.ros_distro }}.txt
+          path: prev_hash_${{ matrix.ros_distro }}-${{ matrix.target }}.txt
           # restore-keys can be used to restore the previous hash if the current one is not found
-          key: hash-${{ matrix.ros_distro }}-${{ steps.upstream.outputs.hash }}
+          key: hash-${{ matrix.ros_distro }}-${{ matrix.target }}-${{ steps.upstream.outputs.hash }}
 
       - name: Check if build is needed
         id: check
         run: |
           if [ "${{ steps.cache-hash.outputs.cache-hit }}" == "true" ]; then
-            echo "No updates found for ${{ matrix.ros_distro }}. Skipping build."
+            echo "No updates found for ${{ matrix.ros_distro }}-${{ matrix.target }}. Skipping build."
             echo "should_build=false" >> $GITHUB_OUTPUT
           else
             echo "New updates or no cache found. Starting build..."
@@ -73,15 +75,19 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
+          target: ${{ matrix.target }}
           push: true
           build-args: |
             ROS_DISTRO=${{ matrix.ros_distro }}
             BRANCH=${{ matrix.upstream_branch }}
           tags: |
-            ghcr.io/${{ steps.repo_name.outputs.lowercase }}:${{ matrix.ros_distro }}-latest
-            ghcr.io/${{ steps.repo_name.outputs.lowercase }}:${{ matrix.ros_distro }}-${{ steps.upstream.outputs.hash }}
+            ghcr.io/${{ steps.repo_name.outputs.lowercase }}/${{ matrix.target }}:${{ matrix.ros_distro }}-latest
+            ghcr.io/${{ steps.repo_name.outputs.lowercase }}/${{ matrix.target }}:${{ matrix.ros_distro }}-${{ steps.upstream.outputs.hash }}
 
-      # Save the current hash to cache for future comparisons
       - name: Save new hash to cache
         if: steps.check.outputs.should_build == 'true'
-        run: cp current_hash_${{ matrix.ros_distro }}.txt prev_hash_${{ matrix.ros_distro }}.txt
+        uses: actions/cache/save@v4
+        with:
+          path: prev_hash_${{ matrix.ros_distro }}-${{ matrix.target }}.txt
+          key: hash-${{ matrix.ros_distro }}-${{ matrix.target }}-${{ steps.upstream.outputs.hash }}
+          run: cp current_hash_${{ matrix.ros_distro }}-${{ matrix.target }}.txt prev_hash_${{ matrix.ros_distro }}-${{ matrix.target }}.txt
